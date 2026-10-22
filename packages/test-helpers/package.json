@@ -8,10 +8,10 @@
     "./*": "./src/*"
   },
   "dependencies": {
-    "@andypalmer/data-store": "^0.0.0",
-    "@andypalmer/find-sign-util": "^0.0.0",
-    "@andypalmer/indexer": "^0.0.0",
-    "@andypalmer/vectors": "^0.0.0",
+    "@andypalmer/data-store": "*",
+    "@andypalmer/find-sign-util": "*",
+    "@andypalmer/indexer": "*",
+    "@andypalmer/vectors": "*",
     "tweetnacl-ts": "^1.0.3"
   }
 }

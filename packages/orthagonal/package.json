@@ -1,6 +1,6 @@
 {
   "name": "@andypalmer/orthagonal",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "The orthagonal search index format: column files and shards, readers and writers",
   "license": "Unlicense",
   "repository": {
@@ -29,8 +29,8 @@
     "test": "vitest"
   },
   "dependencies": {
-    "@andypalmer/find-sign-util": "^0.0.0",
-    "@andypalmer/vectors": "^0.0.0",
+    "@andypalmer/find-sign-util": "^0.1.0",
+    "@andypalmer/vectors": "^0.1.0",
     "nanoid": "^6.0.2"
   },
   "devDependencies": {

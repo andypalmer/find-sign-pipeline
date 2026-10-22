@@ -1,6 +1,6 @@
 {
   "name": "@andypalmer/spider-kit",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "What Find Sign spiders share: polite fetching, crawl bookkeeping, reusing encodings, Vimeo, and the encoded-search-data output",
   "license": "Unlicense",
   "repository": {
@@ -29,6 +29,6 @@
     "test": "vitest"
   },
   "dependencies": {
-    "@andypalmer/records": "^0.0.0"
+    "@andypalmer/records": "^0.1.0"
   }
 }

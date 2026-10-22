@@ -1,6 +1,6 @@
 {
   "name": "@andypalmer/data-store",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Where Find Sign data lives: a storage interface, the find-sign-data server client, and a local folder store",
   "license": "Unlicense",
   "repository": {
@@ -29,7 +29,7 @@
     "test": "vitest"
   },
   "dependencies": {
-    "@andypalmer/find-sign-util": "^0.0.0",
+    "@andypalmer/find-sign-util": "^0.1.0",
     "tweetnacl-ts": "^1.0.3"
   },
   "devDependencies": {

@@ -1,6 +1,6 @@
 {
   "name": "@andypalmer/tags",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Find Sign's tag vocabulary, based on Auslan Signbank's, and how each provider's tags map onto it",
   "license": "Unlicense",
   "repository": {

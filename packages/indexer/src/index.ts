@@ -1,0 +1,7 @@
+export { buildSearchIndex, type BuildOptions, type IndexSettings } from './build.ts'
+export { readEncodedSearchData, resolveSearchDataURLs, withSearchDataDefaults } from './encoded-search-data.ts'
+export { claimsIn, type ClaimStore } from './claims.ts'
+export { overridesIn, type IndexOverride, type Overrides } from './overrides.ts'
+export { recordStoreIn, type RecordStore } from './record-store.ts'
+export { encodedSearchDataFromRecordFile, rebaseRecordFile, recordFileFromEncodedSearchData, updateRecordFile, type FromEncodedSearchDataOptions, type Quirk, type ToEncodedSearchDataOptions } from './records.ts'
+export { default as relativeURL } from './relative-url.ts'

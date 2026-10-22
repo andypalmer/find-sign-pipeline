@@ -1,0 +1,34 @@
+{
+  "name": "@andypalmer/records",
+  "version": "0.0.0",
+  "description": "The sign record schema: what spiders produce and the indexer consumes, with change tracking",
+  "license": "Unlicense",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/andypalmer/find-sign-pipeline.git",
+    "directory": "packages/records"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -b tsconfig.build.json",
+    "prepare": "tsc -b tsconfig.build.json",
+    "check": "tsc -p tsconfig.json",
+    "test": "vitest"
+  },
+  "dependencies": {
+    "valibot": "^1.5.0"
+  }
+}

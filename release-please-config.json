@@ -1,0 +1,62 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "plugins": [
+    "node-workspace"
+  ],
+  "packages": {
+    "packages/util": {
+      "release-type": "node",
+      "component": "find-sign-util",
+      "include-component-in-tag": true,
+      "changelog-path": "CHANGELOG.md"
+    },
+    "packages/vectors": {
+      "release-type": "node",
+      "component": "vectors",
+      "include-component-in-tag": true,
+      "changelog-path": "CHANGELOG.md"
+    },
+    "packages/data-store": {
+      "release-type": "node",
+      "component": "data-store",
+      "include-component-in-tag": true,
+      "changelog-path": "CHANGELOG.md"
+    },
+    "packages/records": {
+      "release-type": "node",
+      "component": "records",
+      "include-component-in-tag": true,
+      "changelog-path": "CHANGELOG.md"
+    },
+    "packages/tags": {
+      "release-type": "node",
+      "component": "tags",
+      "include-component-in-tag": true,
+      "changelog-path": "CHANGELOG.md"
+    },
+    "packages/orthagonal": {
+      "release-type": "node",
+      "component": "orthagonal",
+      "include-component-in-tag": true,
+      "changelog-path": "CHANGELOG.md"
+    },
+    "packages/indexer": {
+      "release-type": "node",
+      "component": "indexer",
+      "include-component-in-tag": true,
+      "changelog-path": "CHANGELOG.md"
+    },
+    "packages/encoder": {
+      "release-type": "node",
+      "component": "encoder",
+      "include-component-in-tag": true,
+      "changelog-path": "CHANGELOG.md"
+    },
+    "packages/spider-kit": {
+      "release-type": "node",
+      "component": "spider-kit",
+      "include-component-in-tag": true,
+      "changelog-path": "CHANGELOG.md"
+    }
+  }
+}

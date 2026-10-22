@@ -1,0 +1,35 @@
+{
+  "name": "@andypalmer/vectors",
+  "version": "0.0.0",
+  "description": "Find Sign word vectors: the length-prefixed .lps format, and lookups in a sharded word vector library",
+  "license": "Unlicense",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/andypalmer/find-sign-pipeline.git",
+    "directory": "packages/vectors"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -b tsconfig.build.json",
+    "prepare": "tsc -b tsconfig.build.json",
+    "check": "tsc -p tsconfig.json",
+    "test": "vitest"
+  },
+  "dependencies": {
+    "@andypalmer/find-sign-util": "^0.0.0",
+    "varint": "^6.0.0"
+  }
+}

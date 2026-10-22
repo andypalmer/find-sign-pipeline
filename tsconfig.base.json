@@ -1,0 +1,21 @@
+{
+	// shared by every package: the built packages are loaded by plain node (and some by browsers, through the
+	// website's bundler), so resolution is node's
+	"compilerOptions": {
+		"target": "esnext",
+		"module": "nodenext",
+		"moduleResolution": "nodenext",
+		"lib": ["ESNext", "DOM", "DOM.Iterable"],
+		"types": ["node"],
+		"strict": true,
+		"verbatimModuleSyntax": true,
+		"isolatedModules": true,
+		"erasableSyntaxOnly": true,
+		"allowImportingTsExtensions": true,
+		"rewriteRelativeImportExtensions": true,
+		"forceConsistentCasingInFileNames": true,
+		"resolveJsonModule": true,
+		"skipLibCheck": true,
+		"noEmit": true
+	}
+}

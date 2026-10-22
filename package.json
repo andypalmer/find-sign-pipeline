@@ -1,0 +1,24 @@
+{
+  "name": "find-sign-pipeline",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Find Sign's data pipeline: the record contract, spiders' shared toolkit, media encoding, and building search indexes",
+  "license": "Unlicense",
+  "type": "module",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "tsc -b tsconfig.build.json",
+    "check": "npm run check --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present -- --run"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "typescript": "~6.0.3",
+    "vitest": "^5.0.5"
+  }
+}

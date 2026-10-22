@@ -1,0 +1,54 @@
+# Keeps a release PR open on main for every package with unreleased changes, each with its next version (from
+# Conventional Commit messages) and changelog; a package's dependents are bumped with it. Merging the PR tags each
+# release (<package>-v1.2.3) and creates GitHub releases, then this tests that commit and publishes the released
+# packages to GitHub Packages, dependencies first.
+# Config: release-please-config.json, .release-please-manifest.json
+
+name: Release Please
+
+on:
+  push:
+    branches: [ "main" ]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    outputs:
+      released: ${{ steps.release.outputs.releases_created }}
+      paths: ${{ steps.release.outputs.paths_released }}
+    steps:
+    - id: release
+      uses: googleapis/release-please-action@v4
+
+  test:
+    needs: release-please
+    if: needs.release-please.outputs.released == 'true'
+    uses: ./.github/workflows/test.yml
+
+  publish:
+    needs: [release-please, test]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 26.x
+        cache: 'npm'
+        registry-url: 'https://npm.pkg.github.com'
+        scope: '@andypalmer'
+    - run: npm ci
+    - name: Publish released packages, dependencies first
+      env:
+        NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        RELEASED: ${{ needs.release-please.outputs.paths }}
+      run: |
+        for package in util vectors data-store records tags orthagonal indexer encoder spider-kit; do
+          if echo "$RELEASED" | grep -q "\"packages/$package\""; then npm publish -w "packages/$package"; fi
+        done

@@ -1,0 +1,17 @@
+{
+  "name": "@andypalmer/test-helpers",
+  "version": "0.0.0",
+  "private": true,
+  "description": "A fake find-sign-data server and fixtures for the pipeline's tests",
+  "type": "module",
+  "exports": {
+    "./*": "./src/*"
+  },
+  "dependencies": {
+    "@andypalmer/data-store": "^0.0.0",
+    "@andypalmer/find-sign-util": "^0.0.0",
+    "@andypalmer/indexer": "^0.0.0",
+    "@andypalmer/vectors": "^0.0.0",
+    "tweetnacl-ts": "^1.0.3"
+  }
+}

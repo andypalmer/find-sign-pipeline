@@ -1,0 +1,15 @@
+{
+	// builds every package, in dependency order: npm run build
+	"files": [],
+	"references": [
+		{ "path": "packages/util/tsconfig.build.json" },
+		{ "path": "packages/vectors/tsconfig.build.json" },
+		{ "path": "packages/orthagonal/tsconfig.build.json" },
+		{ "path": "packages/data-store/tsconfig.build.json" },
+		{ "path": "packages/records/tsconfig.build.json" },
+		{ "path": "packages/tags/tsconfig.build.json" },
+		{ "path": "packages/indexer/tsconfig.build.json" },
+		{ "path": "packages/encoder/tsconfig.build.json" },
+		{ "path": "packages/spider-kit/tsconfig.build.json" }
+	]
+}

@@ -1,0 +1,11 @@
+{
+  "packages/util": "0.0.0",
+  "packages/vectors": "0.0.0",
+  "packages/data-store": "0.0.0",
+  "packages/records": "0.0.0",
+  "packages/tags": "0.0.0",
+  "packages/orthagonal": "0.0.0",
+  "packages/indexer": "0.0.0",
+  "packages/encoder": "0.0.0",
+  "packages/spider-kit": "0.0.0"
+}

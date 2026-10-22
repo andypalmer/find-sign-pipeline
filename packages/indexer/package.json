@@ -1,0 +1,46 @@
+{
+  "name": "@andypalmer/indexer",
+  "version": "0.0.0",
+  "description": "Builds Find Sign search indexes from encoded-search-data, keeping signs' readable ids, and publishes them to a data store",
+  "license": "Unlicense",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/andypalmer/find-sign-pipeline.git",
+    "directory": "packages/indexer"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "bin": {
+    "find-sign-index": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -b tsconfig.build.json",
+    "prepare": "tsc -b tsconfig.build.json",
+    "check": "tsc -p tsconfig.json",
+    "test": "vitest"
+  },
+  "dependencies": {
+    "@andypalmer/find-sign-util": "^0.0.0",
+    "@andypalmer/vectors": "^0.0.0",
+    "@andypalmer/orthagonal": "^0.0.0",
+    "@andypalmer/data-store": "^0.0.0",
+    "@andypalmer/records": "^0.0.0",
+    "@andypalmer/tags": "^0.0.0"
+  },
+  "devDependencies": {
+    "@andypalmer/test-helpers": "^0.0.0",
+    "tweetnacl-ts": "^1.0.3"
+  }
+}

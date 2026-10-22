@@ -1,0 +1,40 @@
+{
+  "name": "@andypalmer/orthagonal",
+  "version": "0.0.0",
+  "description": "The orthagonal search index format: column files and shards, readers and writers",
+  "license": "Unlicense",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/andypalmer/find-sign-pipeline.git",
+    "directory": "packages/orthagonal"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -b tsconfig.build.json",
+    "prepare": "tsc -b tsconfig.build.json",
+    "check": "tsc -p tsconfig.json",
+    "test": "vitest"
+  },
+  "dependencies": {
+    "@andypalmer/find-sign-util": "^0.0.0",
+    "@andypalmer/vectors": "^0.0.0",
+    "nanoid": "^6.0.2"
+  },
+  "devDependencies": {
+    "@andypalmer/test-helpers": "^0.0.0",
+    "tweetnacl-ts": "^1.0.3"
+  }
+}

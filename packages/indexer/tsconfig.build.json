@@ -1,0 +1,22 @@
+{
+	// emits dist/: the javascript and type declarations that are published
+	"extends": "./tsconfig.json",
+	"compilerOptions": {
+		"noEmit": false,
+		"composite": true,
+		"declaration": true,
+		"tsBuildInfoFile": ".tsbuildinfo",
+		"rootDir": "src",
+		"outDir": "dist"
+	},
+	"include": ["src"],
+	// built first, so their types are there to compile against
+	"references": [
+		{ "path": "../util/tsconfig.build.json" },
+		{ "path": "../vectors/tsconfig.build.json" },
+		{ "path": "../orthagonal/tsconfig.build.json" },
+		{ "path": "../data-store/tsconfig.build.json" },
+		{ "path": "../records/tsconfig.build.json" },
+		{ "path": "../tags/tsconfig.build.json" }
+	]
+}

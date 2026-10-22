@@ -1,0 +1,32 @@
+{
+  "name": "@andypalmer/tags",
+  "version": "0.0.0",
+  "description": "Find Sign's tag vocabulary, based on Auslan Signbank's, and how each provider's tags map onto it",
+  "license": "Unlicense",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/andypalmer/find-sign-pipeline.git",
+    "directory": "packages/tags"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -b tsconfig.build.json",
+    "prepare": "tsc -b tsconfig.build.json",
+    "check": "tsc -p tsconfig.json",
+    "test": "vitest",
+    "report": "node scripts/report.ts"
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "name": "@andypalmer/find-sign-util",
+  "version": "0.0.0",
+  "description": "Small utilities Find Sign packages share: filename encoding for ids, iterators, string and hex encoding, hashing, an LRU cache",
+  "license": "Unlicense",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/andypalmer/find-sign-pipeline.git",
+    "directory": "packages/util"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -b tsconfig.build.json",
+    "prepare": "tsc -b tsconfig.build.json",
+    "check": "tsc -p tsconfig.json",
+    "test": "vitest"
+  },
+  "dependencies": {
+    "varint": "^6.0.0"
+  },
+  "devDependencies": {
+    "@types/varint": "^6.0.3"
+  }
+}

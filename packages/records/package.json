@@ -1,6 +1,6 @@
 {
   "name": "@andypalmer/records",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "The sign record schema: what spiders produce and the indexer consumes, with change tracking",
   "license": "Unlicense",
   "repository": {

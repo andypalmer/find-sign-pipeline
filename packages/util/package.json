@@ -1,6 +1,6 @@
 {
   "name": "@andypalmer/find-sign-util",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Small utilities Find Sign packages share: filename encoding for ids, iterators, string and hex encoding, hashing, an LRU cache",
   "license": "Unlicense",
   "repository": {

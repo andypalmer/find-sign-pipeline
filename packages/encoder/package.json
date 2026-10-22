@@ -1,6 +1,6 @@
 {
   "name": "@andypalmer/encoder",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Encodes sign videos for Find Sign with ffmpeg: an h264 mp4 and a vp9 webm within 640x360, and a webp thumbnail",
   "license": "Unlicense",
   "repository": {
@@ -29,7 +29,7 @@
     "test": "vitest"
   },
   "dependencies": {
-    "@andypalmer/records": "^0.0.0"
+    "@andypalmer/records": "^0.1.0"
   },
   "devDependencies": {
     "@andypalmer/test-helpers": "^0.0.0"

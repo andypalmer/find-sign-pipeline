@@ -1,6 +1,6 @@
 {
   "name": "@andypalmer/indexer",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Builds Find Sign search indexes from encoded-search-data, keeping signs' readable ids, and publishes them to a data store",
   "license": "Unlicense",
   "repository": {
@@ -32,12 +32,12 @@
     "test": "vitest"
   },
   "dependencies": {
-    "@andypalmer/find-sign-util": "^0.0.0",
-    "@andypalmer/vectors": "^0.0.0",
-    "@andypalmer/orthagonal": "^0.0.0",
-    "@andypalmer/data-store": "^0.0.0",
-    "@andypalmer/records": "^0.0.0",
-    "@andypalmer/tags": "^0.0.0"
+    "@andypalmer/find-sign-util": "^0.1.0",
+    "@andypalmer/vectors": "^0.1.0",
+    "@andypalmer/orthagonal": "^0.1.0",
+    "@andypalmer/data-store": "^0.1.0",
+    "@andypalmer/records": "^0.1.0",
+    "@andypalmer/tags": "^0.1.0"
   },
   "devDependencies": {
     "@andypalmer/test-helpers": "^0.0.0",

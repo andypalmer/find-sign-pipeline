@@ -8,7 +8,7 @@ import { buildSearchIndex as build } from '../../src/build.ts'
 
 const buildSearchIndex = (provider: string, options: Parameters<typeof build>[2]) => build(provider, testSettings(), options)
 import { parse as parseVectors } from '@andypalmer/vectors'
-import { IndexReader, readIndexManifest, readTopManifest } from '@andypalmer/orthagonal'
+import { IndexReader, looksContentNamed, readIndexManifest, readTopManifest } from '@andypalmer/orthagonal'
 import { decodeHex, sign_open } from 'tweetnacl-ts'
 import { parseRecordFile, serialiseRecordFile } from '@andypalmer/records'
 import { rebaseRecordFile } from '../../src/records.ts'
@@ -379,5 +379,80 @@ describe('buildSearchIndex() writing version 2 beside version 1', () => {
     await build('alpha', testSettings({ writeVersion2: false }), quiet)
     expect(server.get(`${IndexBase}/manifest.json`)).toBeUndefined()
     expect(versionTwoRequests('POST')).toEqual([])
+  })
+})
+
+describe('buildSearchIndex() writing only version 2', () => {
+  const onlyVersionTwo = { writeVersion1: false }
+  const freshServer = async () => {
+    server = new FakeDataServer().install()
+    await publishVectorLibrary(server)
+    publishSearchData(server)
+  }
+  // the version 2 files in the index folder, by name
+  const versionTwoFiles = () => new Map([...server.files].filter(([path]) => path.startsWith(`${IndexBase}/`)).map(([path, bytes]) => [path.slice(IndexBase.length + 1), bytes] as const)
+    .filter(([name]) => name === 'manifest.json' || looksContentNamed(name)).map(([name, bytes]) => [name, new TextDecoder('latin1').decode(bytes)] as const))
+  // everything version 1 keeps: the provider's own folder, and global-vectors.lps
+  const versionOneFiles = () => new Map([...server.files].filter(([path]) => path.startsWith(`${IndexBase}/alpha/`) || path === `${IndexBase}/global-vectors.lps`))
+
+  it('writes no version 1 files: no folder for the provider, no global-vectors.lps, and no request for them', async () => {
+    await build('alpha', testSettings(onlyVersionTwo), quiet)
+    expect([...server.files.keys()].filter(path => path.startsWith(`${IndexBase}/alpha/`))).toEqual([])
+    expect(server.get(`${IndexBase}/global-vectors.lps`)).toBeUndefined()
+    expect(server.requests.filter(r => r.method !== 'GET' && r.method !== 'HEAD').map(r => r.path).filter(path => path === `${IndexBase}/alpha` || path.endsWith('global-vectors.lps'))).toEqual([])
+  })
+
+  it('writes the very same version 2 files as a build that writes both', async () => {
+    await buildSearchIndex('alpha', quiet)
+    const both = versionTwoFiles()
+    expect(both.size).toBeGreaterThan(3)
+
+    await freshServer()
+    await build('alpha', testSettings(onlyVersionTwo), quiet)
+    expect(versionTwoFiles()).toEqual(both)
+  })
+
+  it('leaves the version 1 files already in the store exactly as they were, while it updates version 2', async () => {
+    await buildSearchIndex('alpha', quiet)
+    const oneBefore = versionOneFiles()
+    const twoBefore = versionTwoFiles()
+    expect(oneBefore.size).toBeGreaterThan(5)
+
+    server.set(`${DataBase}overrides/alpha:cat.json`, { title: 'Kitty' })
+    await build('alpha', testSettings(onlyVersionTwo), quiet)
+    expect(versionOneFiles()).toEqual(oneBefore)
+    expect(server.getJSON(`${IndexBase}/alpha/title.json`).entries[0]).toBe('Cat')
+    expect(versionTwoFiles()).not.toEqual(twoBefore)
+    const index = await new IndexReader(IndexBase, { mediaBaseURL: `${IndexBase}/` }).loadIndex('alpha')
+    expect(index.entries.find(entry => entry.id === 'cat')!.title).toBe('Kitty')
+  })
+
+  it('still keeps the provider\'s record file, which holds each sign\'s id, so ids don\'t change between builds', async () => {
+    await build('alpha', testSettings(onlyVersionTwo), quiet)
+    const file = parseRecordFile(server.getText(`${DataBase}records/alpha.records.json`)!)
+    expect(file.records.map(record => record.id)).toEqual(['car', 'cat', 'dog', 'hidden'])
+  })
+
+  it('starts the shared vectors from the other providers\' version 1 vectors, which it reads and does not change', async () => {
+    await build('beta', testSettings({ writeVersion2: false }), quiet) // version 1 only, as before version 2 existed
+    const betaVectors = server.get(`${IndexBase}/beta/vectors.lps`)
+    await build('alpha', testSettings(onlyVersionTwo), quiet)
+    const words = readTopManifest(server.getJSON(`${IndexBase}/manifest.json`)).vectors.flatMap(name => [...parseVectors(server.get(`${IndexBase}/${name}`)!)].map(x => x.word)).sort()
+    expect(words).toEqual(['car', 'cat', 'dog', 'kitten', 'red', 'truck'])
+    expect(server.get(`${IndexBase}/beta/vectors.lps`)).toEqual(betaVectors)
+  })
+
+  it('refuses to build with both versions turned off, because there would be nothing to write', async () => {
+    await expect(build('alpha', testSettings({ writeVersion1: false, writeVersion2: false }), quiet)).rejects.toThrow(/nothing to write/i)
+    expect(server.requests.filter(r => r.method !== 'GET' && r.method !== 'HEAD')).toEqual([])
+  })
+
+  it('reports progress ending at 1 and logs "Build complete"', async () => {
+    const logs: string[] = []
+    const progress: number[] = []
+    await build('alpha', testSettings(onlyVersionTwo), { log: (...x) => logs.push(x.join(' ')), progress: n => progress.push(n) })
+    expect(logs.at(-1)).toBe('Build complete')
+    expect(progress.at(-1)).toBe(1)
+    expect(progress).toEqual([...progress].sort((a, b) => a - b))
   })
 })

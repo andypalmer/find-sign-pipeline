@@ -45,6 +45,10 @@ export type IndexSettings = {
   /** also write the version 2 index (manifest.json and files named after their bytes) beside version 1.
    * Default: true */
   writeVersion2?: boolean,
+  /** write the version 1 index (the provider's folder of column files and shards, and global-vectors.lps).
+   * Turn it off to write only version 2: version 1 files already in the store are left as they are. Record files
+   * are still kept, because they hold each sign's id. Default: true */
+  writeVersion1?: boolean,
   /** how each provider's tags map onto Find Sign's vocabulary, by provider id. A provider without one keeps its
    * tags as they are. Default: @andypalmer/tags' mappings */
   tagMappings?: ReadonlyMap<string, ProviderMapping>,
@@ -71,6 +75,9 @@ export type BuildOptions = {
 
 export async function buildSearchIndex (provider: string, settings: IndexSettings, opts: BuildOptions = {}) {
   const { store, collectionURL, encodedSearchDataURL, indexName, indexes, lookupVector, vectorFidelity = 1, locale, fetch } = settings
+  const writeVersion1 = settings.writeVersion1 ?? true
+  const writeVersion2 = settings.writeVersion2 ?? true
+  if (!writeVersion1 && !writeVersion2) throw new Error('Nothing to write: both the version 1 and the version 2 index are turned off')
   const log = opts.log || ((...str) => console.log(...str))
   const progress = opts.progress || (() => {})
   const records = settings.records || recordStoreIn(store, collectionURL)
@@ -157,9 +164,9 @@ export async function buildSearchIndex (provider: string, settings: IndexSetting
   // folder; version 2's are one level up, in the index folder, so it needs urls relative to that, from its own copy
   const indexFolder = fn`${indexName}/${provider}`
   const indexFolderURL = `${collectionURL}${indexFolder}/`
-  const writeVersion2 = settings.writeVersion2 ?? true
-  const searchDataForVersion2 = writeVersion2 ? structuredClone(searchData) : undefined
-  rebaseMedia(searchData, indexFolderURL)
+  // (when only one of them is written, the data is rebased once, for that one)
+  const searchDataForVersion2 = !writeVersion2 ? undefined : writeVersion1 ? structuredClone(searchData) : searchData
+  if (writeVersion1) rebaseMedia(searchData, indexFolderURL)
   if (searchDataForVersion2) rebaseMedia(searchDataForVersion2, `${collectionURL}${indexName}/`)
 
   let vectorCache: Map<string, WordVector> | undefined
@@ -178,22 +185,26 @@ export async function buildSearchIndex (provider: string, settings: IndexSetting
     return lookedUp.get(word)!
   }
 
-  log(`Building orthagonal index in memory...`)
-  const files = await writeIndex(searchData, {
-    lookupVector: lookUpOnce,
-    log,
-    progress: (num) => progress(0.05 + (num * 0.90))
-  })
+  if (writeVersion1) {
+    log(`Building orthagonal index in memory...`)
+    const files = await writeIndex(searchData, {
+      lookupVector: lookUpOnce,
+      log,
+      progress: (num) => progress(0.05 + (num * 0.90))
+    })
 
-  log(`Search index files constructed, writing...`)
-  progress(0.96)
-  await store.writeMany(indexFolder, files)
-  // a smaller index than last time has fewer shards: the rest would be left behind
-  const stale = (await store.list(indexFolder)).filter(name => /^shard-\d+\.json$/.test(name) && !(name in files))
-  for (const name of stale) await store.delete(`${indexFolder}/${name}`)
-  if (stale.length) log(`Removed ${stale.length} shards left from a larger build`)
+    log(`Search index files constructed, writing...`)
+    progress(0.96)
+    await store.writeMany(indexFolder, files)
+    // a smaller index than last time has fewer shards: the rest would be left behind
+    const stale = (await store.list(indexFolder)).filter(name => /^shard-\d+\.json$/.test(name) && !(name in files))
+    for (const name of stale) await store.delete(`${indexFolder}/${name}`)
+    if (stale.length) log(`Removed ${stale.length} shards left from a larger build`)
+  } else {
+    log(`Not writing the version 1 index (the record files are still kept: they hold each sign's id)`)
+  }
   progress(0.97)
-  log(`Rebuilding global word vector cache: Loading vector files...`)
+  log(`${writeVersion1 ? 'Rebuilding' : 'Reading'} global word vector cache: Loading vector files...`)
   const vectorFiles = await Promise.all(indexes.map(async (index: string) => {
     const vectors = await store.read(fn`${indexName}/${index}/vectors.lps`)
     return vectors && parseVectors(vectors)
@@ -209,8 +220,10 @@ export async function buildSearchIndex (provider: string, settings: IndexSetting
     }
   }
   progress(0.99)
-  log(`Writing global word vector cache...`)
-  await store.write(fn`${indexName}/global-vectors.lps`, buildVectors(globalVectors, vectorFidelity))
+  if (writeVersion1) {
+    log(`Writing global word vector cache...`)
+    await store.write(fn`${indexName}/global-vectors.lps`, buildVectors(globalVectors, vectorFidelity))
+  }
 
   if (searchDataForVersion2) {
     progress(0.995)

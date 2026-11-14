@@ -10,6 +10,8 @@
 //     --locale <locale>              for splitting titles into words (default: en-AU)
 //     --fast                         reuse each provider's vectors from its last build
 //     --keep-identical               index signs with identical videos separately, rather than as one
+//     --version-2-only               write only the version 2 index: version 1 files already there are left as they
+//                                    are. The record files, which hold each sign's id, are still kept
 //     --no-version-2                 don't write the version 2 index (manifest.json and files named after their bytes)
 //                                    beside the version 1 index
 // Writing to a data server needs its write identity in the SEARCH_WRITE_IDENTITY environment variable.
@@ -32,8 +34,14 @@ const { values, positionals: providers } = parseArgs({
     fast: { type: 'boolean', default: false },
     'keep-identical': { type: 'boolean', default: false },
     'no-version-2': { type: 'boolean', default: false },
+    'version-2-only': { type: 'boolean', default: false },
   },
 })
+
+if (values['no-version-2'] && values['version-2-only']) {
+  console.error('--no-version-2 and --version-2-only together would write nothing')
+  process.exit(2)
+}
 
 if (!values.collections || !providers.length) {
   console.error('usage: find-sign-index --collections <folder or url> [options] <provider>...')
@@ -66,6 +74,7 @@ for (const provider of providers) {
     locale: values.locale,
     fetch: fetchWithFiles,
     mergeIdenticalMedia: !values['keep-identical'],
+    writeVersion1: !values['version-2-only'],
     writeVersion2: !values['no-version-2'],
   }, { fast: values.fast })
 }

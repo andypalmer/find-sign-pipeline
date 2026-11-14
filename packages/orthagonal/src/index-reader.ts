@@ -35,6 +35,7 @@ export class IndexReader {
   private indexManifests = new Map<string, { fileName: string, manifest: IndexManifest }>()
   private generation = 0 // goes up each time we ask for manifest.json again
   private refreshing?: Promise<void>
+  private vectorsLoaded?: { key: string, words: Promise<{ [word: string]: WordVector }> }
 
   constructor (baseURL: string, { fetch, mediaBaseURL }: IndexReaderOptions = {}) {
     this.baseURL = baseURL.replace(/\/+$/, '')
@@ -46,8 +47,8 @@ export class IndexReader {
   async loadIndex (indexName: string, { withVectors = false }: { withVectors?: boolean } = {}): Promise<LoadedVersion2Index> {
     const manifest = await this.indexManifestFor(indexName)
     const [scans, vectors] = await Promise.all([
-      Promise.all(manifest.scans.map((_, number) => this.fetchPart(indexName, m => m.scans[number]).then(response => response.json()))),
-      withVectors ? this.loadVectors(indexName, manifest.vectors.length) : Promise.resolve(undefined)
+      Promise.all(manifest.scans.map((_, number) => this.fetchContentNamed(async () => (await this.indexManifestFor(indexName)).scans[number]).then(response => response.json()))),
+      withVectors ? this.loadVectors() : Promise.resolve(undefined)
     ])
 
     const entries = scans.flatMap(scan => (scan.entries as { [field: string]: any }[]).map(row => {
@@ -69,7 +70,10 @@ export class IndexReader {
   }
 
   private async loadWholeSign (indexName: string, id: string): Promise<EncodedSearchDataEntry> {
-    const response = await this.fetchPart(indexName, async manifest => manifest.shards[await whichShardHoldsSign(id, manifest.shardCount)])
+    const response = await this.fetchContentNamed(async () => {
+      const manifest = await this.indexManifestFor(indexName)
+      return manifest.shards[await whichShardHoldsSign(id, manifest.shardCount)]
+    })
     const shard: { entries: EncodedSearchDataEntry[] } = await response.json()
     const found = shard.entries.find(entry => entry.id === id)
     if (!found) throw new Error(`There is no sign with the id "${id}" in index "${indexName}" any more`)
@@ -82,23 +86,35 @@ export class IndexReader {
     return entry
   }
 
-  private async loadVectors (indexName: string, bucketCount: number) {
-    const words: { [word: string]: WordVector } = {}
-    await Promise.all(Array.from({ length: bucketCount }, async (_, number) => {
-      const response = await this.fetchPart(indexName, m => m.vectors[number])
-      for (const { word, getVector } of parseVectorPack(new Uint8Array(await response.arrayBuffer()))) words[word] = getVector()
-    }))
-    return words
+  // the word vectors every index shares, fetched once and kept while manifest.json still names the same files
+  private async loadVectors (): Promise<{ [word: string]: WordVector }> {
+    const fileNames = (await this.topManifest()).vectors
+    const key = fileNames.join(',')
+    if (this.vectorsLoaded?.key !== key) {
+      const words = (async () => {
+        const found: { [word: string]: WordVector } = {}
+        await Promise.all(fileNames.map(async (_, number) => {
+          const response = await this.fetchContentNamed(async () => (await this.topManifest()).vectors[number])
+          for (const { word, getVector } of parseVectorPack(new Uint8Array(await response.arrayBuffer()))) found[word] = getVector()
+        }))
+        return found
+      })()
+      this.vectorsLoaded = { key, words }
+      words.catch(() => { if (this.vectorsLoaded?.words === words) this.vectorsLoaded = undefined }) // a failed load is not remembered
+    }
+    return this.vectorsLoaded.words
   }
 
-  /** fetch a content-named file of the index, working its name out from the manifests we hold; if it has gone, once more after asking for manifest.json again */
-  private async fetchPart (indexName: string, pickName: (manifest: IndexManifest) => string | undefined | Promise<string | undefined>): Promise<Response> {
+  /**
+   * fetch a content-named file, working its name out from the manifests we hold. If it has gone, we ask for
+   * manifest.json again, work the name out again, and try once more.
+   */
+  private async fetchContentNamed (workOutName: () => Promise<string | undefined>): Promise<Response> {
     for (let attempt = 1; ; attempt++) {
       // noted before we read the manifests, so a name worked out from old ones is never mistaken for a new look
       const generation = this.generation
-      const manifest = await this.indexManifestFor(indexName)
-      const fileName = await pickName(manifest)
-      if (fileName === undefined) throw new Error(`Index "${indexName}" has no such file in its manifest`)
+      const fileName = await workOutName()
+      if (fileName === undefined) throw new Error('The manifests have no such file')
       const response = await this.get(fileName)
       if (response.ok) return response
       if (response.status !== 404) throw new Error(`Fetching ${fileName} failed with status ${response.status}`)

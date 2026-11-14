@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { IndexReader, type LoadedVersion2Index } from '../src/index-reader.ts'
-import { planPublishOrder, writeVersion2Index, type PublishedFile } from '../src/write-version-2.ts'
+import { planPublishOrder, writeVersion2Index, writeVersion2Vectors, type PublishedFile } from '../src/write-version-2.ts'
 import type { EncodedSearchData } from '../src/types.ts'
 
 const BASE = 'https://data.test/index'
@@ -18,11 +18,13 @@ const names = Array.from({ length: 60 }, (_, n) => `sign${n}`)
 const signs = (extra: { [name: string]: object } = {}, list: string[] = names): EncodedSearchData =>
   Object.fromEntries(list.map(name => [name, sign(name, extra[name])])) as unknown as EncodedSearchData
 const vectorFor = (word: string) => word.endsWith('s') ? [0.1, 0.9, 0.2, 0.3] : [0.5, 0.1, 0.2, 0.3]
-const lookupVector = async (word: string) => word.startsWith('sign') ? vectorFor(word) : undefined
+const knownVectorWords = new Set<string>()
+const lookupVector = async (word: string) => word.startsWith('sign') || knownVectorWords.has(word) ? vectorFor(word) : undefined
 
 async function publish (data: EncodedSearchData, counts: { shardCount: number } = { shardCount: 8 }) {
-  const alpha = await writeVersion2Index('alpha', data, { lookupVector, ...counts, scanCount: 2, bucketCount: 4 })
-  return planPublishOrder({ alpha })
+  const alpha = await writeVersion2Index('alpha', data, { ...counts, scanCount: 2 })
+  const vectors = await writeVersion2Vectors({ alpha: data }, { lookupVector, bucketCount: 4 })
+  return planPublishOrder({ alpha }, vectors)
 }
 
 // a data server that holds whatever has been published to it, and remembers what it was asked for
@@ -92,9 +94,10 @@ describe('IndexReader.loadIndex()', () => {
 
   it('asks for manifest.json once when loading two indexes', async () => {
     const server = new FakeDataServer()
-    const alpha = await writeVersion2Index('alpha', signs({}, names.slice(0, 20)), { lookupVector })
-    const beta = await writeVersion2Index('beta', signs({}, names.slice(20, 40)), { lookupVector })
-    server.publishNow(planPublishOrder({ alpha, beta }))
+    const alpha = await writeVersion2Index('alpha', signs({}, names.slice(0, 20)))
+    const beta = await writeVersion2Index('beta', signs({}, names.slice(20, 40)))
+    const vectors = await writeVersion2Vectors({ alpha: signs({}, names.slice(0, 20)), beta: signs({}, names.slice(20, 40)) }, { lookupVector })
+    server.publishNow(planPublishOrder({ alpha, beta }, vectors))
     const reader = new IndexReader(BASE, { fetch: server.fetch })
     await Promise.all([reader.loadIndex('alpha'), reader.loadIndex('beta')])
     expect(server.asked('manifest.json')).toHaveLength(1)
@@ -107,6 +110,22 @@ describe('IndexReader.loadIndex()', () => {
     expect(entry.vectors).toHaveLength(2)
     expect(entry.vectors!.every(vector => vector instanceof Float32Array)).toBe(true)
     expect(Array.from(entry.vectors![0]!)).toEqual(expect.arrayContaining([expect.any(Number)]))
+  })
+
+  it('fetches each shared vector bucket once, however many indexes are loaded with vectors', async () => {
+    const server = new FakeDataServer()
+    const first = signs({}, names.slice(0, 20))
+    const second = signs({}, names.slice(20, 40))
+    const alpha = await writeVersion2Index('alpha', first)
+    const beta = await writeVersion2Index('beta', second)
+    const vectors = await writeVersion2Vectors({ alpha: first, beta: second }, { lookupVector, bucketCount: 4 })
+    server.publishNow(planPublishOrder({ alpha, beta }, vectors))
+    const reader = new IndexReader(BASE, { fetch: server.fetch })
+    const [a, b] = await Promise.all([reader.loadIndex('alpha', { withVectors: true }), reader.loadIndex('beta', { withVectors: true })])
+    expect(server.asked('vectors-')).toHaveLength(4)
+    // each index's signs get vectors from the one shared set
+    expect(entryNamed(a, 'sign3').vectors).toHaveLength(2)
+    expect(entryNamed(b, 'sign25').vectors).toHaveLength(2)
   })
 
   it('says which index is unknown, and refuses a manifest of a version it doesn\'t know', async () => {
@@ -170,6 +189,22 @@ describe('when a kept file has gone', () => {
     const { server, index } = await loadedThenRebuilt()
     await entryNamed(index, 'sign7').load()
     expect(server.asked('shard-')).toHaveLength(2)
+  })
+
+  it('finds a vector bucket again like any other kept file, when a new word has changed one', async () => {
+    const { reader, server } = await readerOver()
+    await reader.loadIndex('alpha') // holds the manifests, but has fetched no vectors yet
+    knownVectorWords.add('brandnewword')
+    try {
+      server.publishNow(await publish(signs({ sign7: { words: ['sign7', 'brandnewword'] } })), { clearOld: true })
+      server.requests.length = 0
+      const index = await reader.loadIndex('alpha', { withVectors: true })
+      expect(entryNamed(index, 'sign7').vectors).toHaveLength(2)
+      expect(server.asked('manifest.json')).toHaveLength(1)
+      expect(server.asked('manifest.json')[0].cache).toBe('no-cache')
+    } finally {
+      knownVectorWords.delete('brandnewword')
+    }
   })
 
   it('still works when the new build has a different number of shards', async () => {

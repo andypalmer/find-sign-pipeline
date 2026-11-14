@@ -4,8 +4,8 @@
   "packages/data-store": "0.1.0",
   "packages/records": "0.1.0",
   "packages/tags": "0.1.0",
-  "packages/orthagonal": "0.1.0",
-  "packages/indexer": "0.1.0",
+  "packages/orthagonal": "0.2.0",
+  "packages/indexer": "0.2.0",
   "packages/encoder": "0.1.0",
   "packages/spider-kit": "0.1.0"
 }

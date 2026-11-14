@@ -456,3 +456,81 @@ describe('buildSearchIndex() writing only version 2', () => {
     expect(progress).toEqual([...progress].sort((a, b) => a - b))
   })
 })
+
+describe('buildSearchIndex() keeping record files', () => {
+  const recordsPath = `${DataBase}records/alpha.records.json`
+  const recordWrites = () => server.requests.filter(r => r.method === 'PUT' && r.path === recordsPath)
+  // a later build must have a later clock reading, or "last seen" couldn't differ
+  const later = () => new Promise(resolve => setTimeout(resolve, 5))
+  const lastSeen = () => parseRecordFile(server.getText(recordsPath)!).records.map(record => record.provenance.lastSeen)
+
+  it('writes the record file the first time', async () => {
+    await buildSearchIndex('alpha', quiet)
+    expect(recordWrites()).toHaveLength(1)
+  })
+
+  it('leaves the record file exactly as it is when no sign has changed, though a build has seen them all again', async () => {
+    await buildSearchIndex('alpha', quiet)
+    const before = server.getText(recordsPath)
+    server.resetRequests()
+    await later()
+    const logs: string[] = []
+    await buildSearchIndex('alpha', { ...quiet, log: (...x) => logs.push(x.join(' ')) })
+    expect(recordWrites()).toEqual([])
+    expect(server.getText(recordsPath)).toBe(before)
+    expect(logs).toContain('Records: nothing changed, so the record file is left as it is')
+  })
+
+  it('leaves it alone for a build that writes only version 2, too', async () => {
+    await buildSearchIndex('alpha', quiet)
+    server.resetRequests()
+    await later()
+    await build('alpha', testSettings({ writeVersion1: false }), quiet)
+    expect(recordWrites()).toEqual([])
+  })
+
+  it('writes it when a sign has changed, and then every sign was seen at the new time', async () => {
+    await buildSearchIndex('alpha', quiet)
+    const seenBefore = lastSeen()
+    await later()
+    server.set(`${DataBase}overrides/alpha:cat.json`, { title: 'Kitty' })
+    server.resetRequests()
+    await buildSearchIndex('alpha', quiet)
+    expect(recordWrites()).toHaveLength(1)
+    expect(lastSeen().some((time, n) => time !== seenBefore[n])).toBe(true)
+  })
+
+  it('writes it when a new sign has come', async () => {
+    await buildSearchIndex('alpha', quiet)
+    const data = publishedAlpha() as any
+    data.bird = { ...data.dog, title: 'Bird', words: ['bird'] }
+    publishSearchData(server, { alpha: data })
+    server.resetRequests()
+    await buildSearchIndex('alpha', quiet)
+    expect(recordWrites()).toHaveLength(1)
+    expect(parseRecordFile(server.getText(recordsPath)!).records.map(record => record.id)).toContain('bird')
+  })
+
+  it('writes it when a sign has gone missing, because how many builds it has been missing for is kept in it', async () => {
+    await buildSearchIndex('alpha', quiet)
+    const data = publishedAlpha() as any
+    delete data.dog
+    publishSearchData(server, { alpha: data })
+    server.resetRequests()
+    await buildSearchIndex('alpha', quiet)
+    expect(recordWrites()).toHaveLength(1)
+    const dog = parseRecordFile(server.getText(recordsPath)!).records.find(record => record.id === 'dog')!
+    expect(dog.provenance.status).toBe('missing')
+  })
+
+  it('writes it when only the provider\'s own details have changed', async () => {
+    await buildSearchIndex('alpha', quiet)
+    const data = publishedAlpha() as any
+    for (const sign of Object.values<any>(data)) if (sign.provider) sign.provider = { ...sign.provider, name: 'Alpha Dictionary, renamed' }
+    publishSearchData(server, { alpha: data })
+    server.resetRequests()
+    await buildSearchIndex('alpha', quiet)
+    expect(recordWrites()).toHaveLength(1)
+    expect(parseRecordFile(server.getText(recordsPath)!).provider.name).toBe('Alpha Dictionary, renamed')
+  })
+})

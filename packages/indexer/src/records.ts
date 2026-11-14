@@ -6,7 +6,7 @@
 // An entry's key becomes its record's sourceId, and its old permalink: on the first conversion each record gets
 // a readable id from its title, with the key kept as an alias when they differ, so old urls can still lead to
 // it. Later conversions (updateRecordFile) keep those ids.
-import { contentHash, createRecordFile, firstObservation, readableId, reconcile, type Change, type Digest, type IdPolicy, type MediaItem, type ProviderInfo, type RecordContent, type RecordFile, type SignRecord } from '@andypalmer/records'
+import { contentHash, createRecordFile, firstObservation, readableId, reconcile, serialiseRecordFile, type Change, type Digest, type IdPolicy, type MediaItem, type ProviderInfo, type RecordContent, type RecordFile, type SignRecord } from '@andypalmer/records'
 import type { EncodedSearchData, EncodedSearchDataEntry, SearchDataEncodedMedia } from '@andypalmer/orthagonal'
 import { withSearchDataDefaults } from './encoded-search-data.ts'
 
@@ -68,6 +68,19 @@ export async function updateRecordFile (previous: RecordFile | undefined, raw: R
   // an empty file has no provider details of its own
   const info = Object.keys(data).length ? providerInfo(provider, data) : previous.provider
   return { file: createRecordFile(info, records), changes }
+}
+
+/**
+ * whether two record files say the same thing, not counting when each sign was last seen. A build stamps every
+ * sign with the time it saw it, so a file rebuilt from the same data differs only in those stamps, and there is
+ * no reason to write it again.
+ */
+export function sameApartFromLastSeen (a: RecordFile, b: RecordFile): boolean {
+  const withoutLastSeen = (file: RecordFile) => serialiseRecordFile({
+    ...file,
+    records: file.records.map(record => ({ ...record, provenance: { ...record.provenance, lastSeen: '1970-01-01T00:00:00.000Z' } }))
+  })
+  return withoutLastSeen(a) === withoutLastSeen(b)
 }
 
 export type ToEncodedSearchDataOptions = {

@@ -13,7 +13,7 @@ import { readEncodedSearchData } from './encoded-search-data.ts'
 import { mergeIdenticalMedia } from './merge.ts'
 import { overridesIn } from './overrides.ts'
 import { recordStoreIn, type RecordStore } from './record-store.ts'
-import { rebaseRecordFile, updateRecordFile } from './records.ts'
+import { rebaseRecordFile, sameApartFromLastSeen, updateRecordFile } from './records.ts'
 import relativeURL from './relative-url.ts'
 import { Version2Publisher } from './version-2-publisher.ts'
 
@@ -107,7 +107,8 @@ export async function buildSearchIndex (provider: string, settings: IndexSetting
 
   log(`Updating records...`)
   const recordsURL = records.url(provider)
-  const { file, changes } = await updateRecordFile(await records.read(provider) ?? await spiderRecords(provider, encodedSearchDataURL, recordsURL, fetch), allData, {
+  const stored = await records.read(provider)
+  const { file, changes } = await updateRecordFile(stored ?? await spiderRecords(provider, encodedSearchDataURL, recordsURL, fetch), allData, {
     provider,
     seenAt: new Date().toISOString(),
     locale,
@@ -115,7 +116,13 @@ export async function buildSearchIndex (provider: string, settings: IndexSetting
     url: url => relativeURL(recordsURL, new URL(url, encodedURL).toString()),
     onQuirk: ({ id, message }) => log(`  ${id}: ${message}`),
   })
-  await records.write(file)
+  // a build stamps every sign with when it was last seen, so writing the file every time would change it even when
+  // nothing else has: only write it when there is something else to write
+  if (stored && sameApartFromLastSeen(stored, file)) {
+    log(`Records: nothing changed, so the record file is left as it is`)
+  } else {
+    await records.write(file)
+  }
   if (changes) {
     log(`Records: ${Object.entries(changes).filter(([, ids]) => ids.length).map(([change, ids]) => `${ids.length} ${change}`).join(', ') || 'none'}`)
   } else {

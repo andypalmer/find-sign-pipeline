@@ -90,12 +90,27 @@ export function writeTopManifest (manifestNames: { [indexName: string]: string }
 
 /** every file of these indexes, once each, in the order that is never wrong to publish them in */
 export function planPublishOrder (indexes: { [indexName: string]: WrittenIndex }, vectors: WrittenVectors): PublishedFile[] {
+  const { contentFiles, indexManifests, topManifest } = planPublishTiers(indexes, vectors)
+  return [...contentFiles, ...indexManifests, topManifest]
+}
+
+export type PublishTiers = {
+  contentFiles: PublishedFile[], // shards, scan files and vector buckets: all named after their bytes
+  indexManifests: PublishedFile[], // each index's own manifest, also named after its bytes
+  topManifest: PublishedFile, // manifest.json, the one file that can change
+}
+
+/**
+ * the same files as planPublishOrder, kept in their three groups. Whoever publishes needs the groups: the
+ * files in one group can go out together in any order, but each group must be finished before the next starts.
+ */
+export function planPublishTiers (indexes: { [indexName: string]: WrittenIndex }, vectors: WrittenVectors): PublishTiers {
   const written = Object.values(indexes)
   const manifestNames = new Set(written.map(index => index.manifestName))
-  const contentFiles = [...written.flatMap(index => index.files.filter(file => !manifestNames.has(file.name))), ...vectors.files]
-  const manifestFiles = written.map(index => index.files.find(file => file.name === index.manifestName)!)
+  const contentFiles = withoutRepeats([...written.flatMap(index => index.files.filter(file => !manifestNames.has(file.name))), ...vectors.files])
+  const indexManifests = written.map(index => index.files.find(file => file.name === index.manifestName)!)
   const manifestNamesByIndex = Object.fromEntries(Object.entries(indexes).map(([name, index]) => [name, index.manifestName]))
-  return withoutRepeats([...contentFiles, ...manifestFiles, writeTopManifest(manifestNamesByIndex, vectors.vectorNames)])
+  return { contentFiles, indexManifests: withoutRepeats(indexManifests), topManifest: writeTopManifest(manifestNamesByIndex, vectors.vectorNames) }
 }
 
 function withoutRepeats (files: PublishedFile[]): PublishedFile[] {

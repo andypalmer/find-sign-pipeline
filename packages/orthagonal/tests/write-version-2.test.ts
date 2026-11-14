@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { parse } from '@andypalmer/vectors'
-import { planPublishOrder, writeTopManifest, writeVersion2Index, writeVersion2Vectors, type PublishedFile, type WrittenIndex, type WrittenVectors } from '../src/write-version-2.ts'
+import { planPublishOrder, planPublishTiers, writeTopManifest, writeVersion2Index, writeVersion2Vectors, type PublishedFile, type WrittenIndex, type WrittenVectors } from '../src/write-version-2.ts'
 import { readIndexManifest, readTopManifest } from '../src/manifest.ts'
 import { looksContentNamed } from '../src/content-name.ts'
 import type { EncodedSearchData } from '../src/types.ts'
@@ -264,5 +264,58 @@ describe('planPublishOrder()', () => {
     const planned = planPublishOrder({ alpha: a, beta: b }, vectors).map(file => file.name)
     expect(new Set(planned).size).toBe(planned.length)
     expect(planned.length).toBeLessThan(a.files.length + b.files.length + vectors.files.length + 1)
+  })
+})
+
+describe('planPublishTiers()', () => {
+  const tierOptions = { shardCount: 8, scanCount: 2 }
+  async function collectionWritten () {
+    const indexes = {
+      alpha: await writeVersion2Index('alpha', signs(names.slice(0, 60)), tierOptions),
+      beta: await writeVersion2Index('beta', signs(names.slice(60)), tierOptions)
+    }
+    const vectors = await writeVersion2Vectors({ alpha: signs(names.slice(0, 60)), beta: signs(names.slice(60)) }, { lookupVector, bucketCount: 4 })
+    return { indexes, vectors }
+  }
+
+  it('puts every shard, scan file and vector bucket in the content tier, and nothing else', async () => {
+    const { indexes, vectors } = await collectionWritten()
+    const tiers = planPublishTiers(indexes, vectors)
+    const expected = new Set([
+      ...Object.values(indexes).flatMap(index => [...index.manifest.shards, ...index.manifest.scans]),
+      ...vectors.vectorNames
+    ])
+    expect(new Set(tiers.contentFiles.map(file => file.name))).toEqual(expected)
+    expect(tiers.contentFiles.every(file => looksContentNamed(file.name))).toBe(true)
+  })
+
+  it('puts each index\'s own manifest in the index manifest tier, and nothing else', async () => {
+    const { indexes, vectors } = await collectionWritten()
+    const tiers = planPublishTiers(indexes, vectors)
+    expect(tiers.indexManifests.map(file => file.name)).toEqual([indexes.alpha.manifestName, indexes.beta.manifestName])
+    for (const file of tiers.indexManifests) expect(file.contents).toBe(byName(indexes[file.name === indexes.alpha.manifestName ? 'alpha' : 'beta'], file.name).contents)
+  })
+
+  it('has manifest.json on its own, naming those index manifests and those vector buckets', async () => {
+    const { indexes, vectors } = await collectionWritten()
+    const { topManifest } = planPublishTiers(indexes, vectors)
+    expect(topManifest.name).toBe('manifest.json')
+    expect(readTopManifest(JSON.parse(text(topManifest.contents)))).toEqual({
+      version: 2, indexes: { alpha: indexes.alpha.manifestName, beta: indexes.beta.manifestName }, vectors: vectors.vectorNames
+    })
+  })
+
+  it('lists a content file once even when two indexes both have it', async () => {
+    const a = await writeVersion2Index('alpha', signs([]), tierOptions)
+    const b = await writeVersion2Index('beta', signs([]), tierOptions)
+    const vectors = await writeVersion2Vectors({ alpha: signs([]), beta: signs([]) }, { lookupVector, bucketCount: 4 })
+    const names = planPublishTiers({ alpha: a, beta: b }, vectors).contentFiles.map(file => file.name)
+    expect(new Set(names).size).toBe(names.length)
+  })
+
+  it('is the same files, in the same order, as the plan that comes as one list', async () => {
+    const { indexes, vectors } = await collectionWritten()
+    const { contentFiles, indexManifests, topManifest } = planPublishTiers(indexes, vectors)
+    expect(planPublishOrder(indexes, vectors)).toEqual([...contentFiles, ...indexManifests, topManifest])
   })
 })

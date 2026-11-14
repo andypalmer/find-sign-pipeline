@@ -319,3 +319,58 @@ describe('planPublishTiers()', () => {
     expect(planPublishOrder(indexes, vectors)).toEqual([...contentFiles, ...indexManifests, topManifest])
   })
 })
+
+describe('carrying over indexes the build did not rebuild', () => {
+  const carryOptions = { shardCount: 8, scanCount: 2 }
+  async function twoIndexes () {
+    const alpha = await writeVersion2Index('alpha', signs(names.slice(0, 60)), carryOptions)
+    const beta = await writeVersion2Index('beta', signs(names.slice(60)), carryOptions)
+    const vectors = await writeVersion2Vectors({ alpha: signs(names.slice(0, 60)), beta: signs(names.slice(60)) }, { lookupVector, bucketCount: 4 })
+    return { alpha, beta, vectors }
+  }
+
+  it('names a carried-over index in manifest.json, though its files are not published again', async () => {
+    const { alpha, beta, vectors } = await twoIndexes()
+    const tiers = planPublishTiers({ beta }, vectors, { alpha: alpha.manifestName })
+
+    expect(readTopManifest(JSON.parse(text(tiers.topManifest.contents))).indexes).toEqual({ alpha: alpha.manifestName, beta: beta.manifestName })
+    const published = new Set([...tiers.contentFiles, ...tiers.indexManifests].map(file => file.name))
+    expect(published.has(alpha.manifestName)).toBe(false)
+    for (const name of [...alpha.manifest.shards, ...alpha.manifest.scans].filter(name => !beta.manifest.shards.includes(name) && !beta.manifest.scans.includes(name))) {
+      expect(published.has(name)).toBe(false)
+    }
+    expect(tiers.indexManifests.map(file => file.name)).toEqual([beta.manifestName])
+  })
+
+  it('makes the very same manifest.json whether an index was rebuilt or carried over, whichever order they come in', async () => {
+    const { alpha, beta, vectors } = await twoIndexes()
+    const allRebuilt = planPublishTiers({ beta, alpha }, vectors).topManifest.contents
+    expect(planPublishTiers({ beta }, vectors, { alpha: alpha.manifestName }).topManifest.contents).toBe(allRebuilt)
+    expect(planPublishTiers({ alpha }, vectors, { beta: beta.manifestName }).topManifest.contents).toBe(allRebuilt)
+  })
+
+  it('lists the indexes in manifest.json by name, so the bytes never depend on which were rebuilt', async () => {
+    const { alpha, beta, vectors } = await twoIndexes()
+    const top = JSON.parse(text(planPublishTiers({ beta }, vectors, { alpha: alpha.manifestName }).topManifest.contents))
+    expect(Object.keys(top.indexes)).toEqual(['alpha', 'beta'])
+  })
+
+  it('takes the same carried-over indexes in the plan that comes as one list', async () => {
+    const { alpha, beta, vectors } = await twoIndexes()
+    const carried = { alpha: alpha.manifestName }
+    const { contentFiles, indexManifests, topManifest } = planPublishTiers({ beta }, vectors, carried)
+    expect(planPublishOrder({ beta }, vectors, carried)).toEqual([...contentFiles, ...indexManifests, topManifest])
+  })
+
+  it('refuses an index that is both rebuilt and carried over, because we could not tell which manifest is meant', async () => {
+    const { alpha, beta, vectors } = await twoIndexes()
+    expect(() => planPublishTiers({ alpha, beta }, vectors, { alpha: alpha.manifestName })).toThrow(/alpha/)
+  })
+
+  it('refuses a carried-over manifest name that is not one plain file name, so we never write an unreadable manifest.json', async () => {
+    const { beta, vectors } = await twoIndexes()
+    for (const bad of ['../secret.json', 'folder/index.1234567890.json', 'https://elsewhere.test/x.json', '']) {
+      expect(() => planPublishTiers({ beta }, vectors, { alpha: bad })).toThrow(/alpha|plain file name/)
+    }
+  })
+})

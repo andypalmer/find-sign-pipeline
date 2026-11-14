@@ -6,7 +6,7 @@
 import type { Vector } from '@andypalmer/vectors'
 import type { EncodedSearchData } from './types.ts'
 import type { IndexManifest, TopManifest } from './manifest.ts'
-import { SUPPORTED_VERSION } from './manifest.ts'
+import { SUPPORTED_VERSION, readTopManifest } from './manifest.ts'
 import { nameFileAfterItsBytes } from './content-name.ts'
 import { cutSigns, nextScanCount, nextShardCount } from './cut-signs.ts'
 import { cutVectors } from './cut-vectors.ts'
@@ -89,10 +89,13 @@ export function writeTopManifest (manifestNames: { [indexName: string]: string }
 }
 
 /** every file of these indexes, once each, in the order that is never wrong to publish them in */
-export function planPublishOrder (indexes: { [indexName: string]: WrittenIndex }, vectors: WrittenVectors): PublishedFile[] {
-  const { contentFiles, indexManifests, topManifest } = planPublishTiers(indexes, vectors)
+export function planPublishOrder (indexes: { [indexName: string]: WrittenIndex }, vectors: WrittenVectors, carriedOver: CarriedOverIndexes = {}): PublishedFile[] {
+  const { contentFiles, indexManifests, topManifest } = planPublishTiers(indexes, vectors, carriedOver)
   return [...contentFiles, ...indexManifests, topManifest]
 }
+
+/** indexes a build did not rebuild: each one's name, and the file name of the index manifest it already has */
+export type CarriedOverIndexes = { [indexName: string]: string }
 
 export type PublishTiers = {
   contentFiles: PublishedFile[], // shards, scan files and vector buckets: all named after their bytes
@@ -104,13 +107,22 @@ export type PublishTiers = {
  * the same files as planPublishOrder, kept in their three groups. Whoever publishes needs the groups: the
  * files in one group can go out together in any order, but each group must be finished before the next starts.
  */
-export function planPublishTiers (indexes: { [indexName: string]: WrittenIndex }, vectors: WrittenVectors): PublishTiers {
+export function planPublishTiers (indexes: { [indexName: string]: WrittenIndex }, vectors: WrittenVectors, carriedOver: CarriedOverIndexes = {}): PublishTiers {
+  const clash = Object.keys(carriedOver).find(indexName => indexName in indexes)
+  if (clash !== undefined) throw new Error(`Index "${clash}" is both rebuilt and carried over; we can't tell which manifest is meant`)
+
   const written = Object.values(indexes)
   const manifestNames = new Set(written.map(index => index.manifestName))
   const contentFiles = withoutRepeats([...written.flatMap(index => index.files.filter(file => !manifestNames.has(file.name))), ...vectors.files])
   const indexManifests = written.map(index => index.files.find(file => file.name === index.manifestName)!)
-  const manifestNamesByIndex = Object.fromEntries(Object.entries(indexes).map(([name, index]) => [name, index.manifestName]))
-  return { contentFiles, indexManifests: withoutRepeats(indexManifests), topManifest: writeTopManifest(manifestNamesByIndex, vectors.vectorNames) }
+  // sorted by name, so manifest.json's bytes depend only on which indexes there are, not on which we rebuilt now
+  const manifestNamesByIndex = Object.fromEntries([
+    ...Object.entries(carriedOver),
+    ...Object.entries(indexes).map(([name, index]) => [name, index.manifestName] as const)
+  ].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0))
+  const topManifest = writeTopManifest(manifestNamesByIndex, vectors.vectorNames)
+  readTopManifest(JSON.parse(topManifest.contents as string)) // never write a manifest.json that the reader would refuse
+  return { contentFiles, indexManifests: withoutRepeats(indexManifests), topManifest }
 }
 
 function withoutRepeats (files: PublishedFile[]): PublishedFile[] {

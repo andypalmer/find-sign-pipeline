@@ -143,3 +143,58 @@ describe('planPublishOrder()', () => {
     expect(planned.length).toBeLessThan(a.files.length + b.files.length + 1)
   })
 })
+
+describe('writeVersion2Index() keeping the last build\'s counts', () => {
+  const nameList = (count: number) => Array.from({ length: count }, (_, n) => `sign${n}`)
+  const build = (count: number, extra: object = {}) => writeVersion2Index('alpha', signs(nameList(count)), { lookupVector, ...extra })
+
+  it('keeps the shard count when signs grow past the point where we would have picked a bigger one', async () => {
+    const first = await build(128) // exactly 16 signs a shard
+    expect(first.manifest.shardCount).toBe(8)
+    expect((await build(129)).manifest.shardCount).toBe(9) // what happens without the last manifest
+    expect((await build(129, { previous: first.manifest })).manifest.shardCount).toBe(8)
+  })
+
+  it('so adding that one sign makes one new shard, not a new set of them', async () => {
+    const first = await build(128)
+    const second = await build(129, { previous: first.manifest })
+    const newShards = second.manifest.shards.filter(name => !first.manifest.shards.includes(name))
+    expect(newShards).toHaveLength(1)
+  })
+
+  it('doubles the shard count when shards have grown to more than twice the target size', async () => {
+    const first = await build(128)
+    expect((await build(8 * 32, { previous: first.manifest })).manifest.shardCount).toBe(8)
+    expect((await build(8 * 32 + 1, { previous: first.manifest })).manifest.shardCount).toBe(16)
+  })
+
+  it('never shrinks the shard count when signs go', async () => {
+    const first = await build(128)
+    expect((await build(10, { previous: first.manifest })).manifest.shardCount).toBe(8)
+  })
+
+  it('keeps the scan count, and the number of vector buckets, whatever else changes', async () => {
+    const first = await build(100, { scanCount: 2, bucketCount: 4 })
+    const second = await build(110, { previous: first.manifest })
+    expect(second.manifest.scans).toHaveLength(2) // we would have picked 1
+    expect(second.manifest.vectors).toHaveLength(4) // we would have picked 64
+  })
+
+  it('lets a count we ask for outweigh the last build\'s', async () => {
+    const first = await build(128)
+    const second = await build(128, { previous: first.manifest, shardCount: 3, scanCount: 3, bucketCount: 5 })
+    expect([second.manifest.shardCount, second.manifest.scans.length, second.manifest.vectors.length]).toEqual([3, 3, 5])
+  })
+
+  it('works out its counts afresh, as before, when there is no last build', async () => {
+    const first = await build(129)
+    expect(first.manifest.shardCount).toBe(9)
+    expect(first.manifest.vectors).toHaveLength(64)
+  })
+
+  it('makes the same files again when built from its own last manifest with nothing changed', async () => {
+    const first = await build(128)
+    const again = await build(128, { previous: first.manifest })
+    expect(again.manifestName).toBe(first.manifestName)
+  })
+})

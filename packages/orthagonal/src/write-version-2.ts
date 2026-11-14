@@ -6,7 +6,7 @@ import type { EncodedSearchData } from './types.ts'
 import type { IndexManifest, TopManifest } from './manifest.ts'
 import { SUPPORTED_VERSION } from './manifest.ts'
 import { nameFileAfterItsBytes } from './content-name.ts'
-import { cutSigns } from './cut-signs.ts'
+import { cutSigns, nextScanCount, nextShardCount } from './cut-signs.ts'
 import { cutVectors } from './cut-vectors.ts'
 import normalizeWord from './normalize-word.ts'
 
@@ -23,7 +23,11 @@ export type WrittenIndex = {
 export type WriteVersion2IndexOptions = {
   lookupVector: (word: string) => Promise<Vector | undefined>,
   keepVectors?: { [word: string]: Vector }, // words to keep even if no sign uses them now (the last build's)
-  shardCount?: number, // keep an index's old counts to avoid moving signs about; otherwise we pick them
+  // The last build's index manifest. With it, we keep that build's counts (see nextShardCount) so signs and
+  // words stay where they were. Without it this is a first build and we pick the counts.
+  previous?: IndexManifest,
+  // counts to use whatever the last build had
+  shardCount?: number,
   scanCount?: number,
   bucketCount?: number,
 }
@@ -35,9 +39,15 @@ export async function writeVersion2Index (indexName: string, searchData: Encoded
   if (!PLAIN_INDEX_NAME.test(indexName)) throw new Error(`The index name must be letters, numbers, dashes and underscores only, not "${indexName}"`)
 
   const vectorsByWord = { ...options.keepVectors, ...await lookUpVectorsForWordsIn(searchData, options.lookupVector) }
+  const { previous } = options
+  const signCount = Object.keys(searchData).length
   const [signs, vectors] = await Promise.all([
-    cutSigns(searchData, { shardCount: options.shardCount, scanCount: options.scanCount }),
-    cutVectors(vectorsByWord, { bucketCount: options.bucketCount })
+    cutSigns(searchData, {
+      shardCount: options.shardCount ?? (previous && nextShardCount(previous.shardCount, signCount)),
+      scanCount: options.scanCount ?? (previous && nextScanCount(previous.scans.length, signCount))
+    }),
+    // a word's bucket is its hash modulo the bucket count, so the count never changes once an index has one
+    cutVectors(vectorsByWord, { bucketCount: options.bucketCount ?? previous?.vectors.length })
   ])
 
   const manifest: IndexManifest = {

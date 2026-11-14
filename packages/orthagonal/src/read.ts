@@ -33,7 +33,10 @@ export type LoadedOrthagonalEntry = {
   sourceCreated?: number, // epochMs, when the source says the sign was made
   sourceUpdated?: number, // epochMs, when the source says it last changed
   load: () => Promise<EncodedSearchDataEntry>,
-  indexURL: string
+  indexURL: string,
+  // the name of the index the entry is in, when the loader knows it. Version 2 entries share one indexURL (all the
+  // indexes are in one folder), so this is what tells their indexes apart
+  indexName?: string
 }
 
 export class OutdatedError extends Error {

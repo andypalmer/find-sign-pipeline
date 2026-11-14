@@ -69,6 +69,19 @@ describe('IndexReader.loadIndex()', () => {
     })
   })
 
+  it('says which index each entry is in, because every index shares one address', async () => {
+    const server = new FakeDataServer()
+    const alpha = await writeVersion2Index('alpha', signs({}, names.slice(0, 20)))
+    const beta = await writeVersion2Index('beta', signs({}, names.slice(20, 40)))
+    const vectors = await writeVersion2Vectors({ alpha: signs({}, names.slice(0, 20)), beta: signs({}, names.slice(20, 40)) }, { lookupVector })
+    server.publishNow(planPublishOrder({ alpha, beta }, vectors))
+    const reader = new IndexReader(BASE, { fetch: server.fetch })
+    const [a, b] = await Promise.all([reader.loadIndex('alpha'), reader.loadIndex('beta')])
+    expect(a.entries.map(entry => entry.indexName)).toEqual(Array(20).fill('alpha'))
+    expect(b.entries.map(entry => entry.indexName)).toEqual(Array(20).fill('beta'))
+    expect(a.entries[0].indexURL).toBe(b.entries[0].indexURL)
+  })
+
   it('fills in what a sign doesn\'t have, as version 1 did', async () => {
     const { reader } = await readerOver()
     const entry = entryNamed(await reader.loadIndex('alpha'), 'sign3')

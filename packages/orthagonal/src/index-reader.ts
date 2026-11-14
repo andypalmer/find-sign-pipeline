@@ -55,7 +55,8 @@ export class IndexReader {
       const entry: LoadedOrthagonalEntry & { [field: string]: any } = {
         vectors: [] as WordVector[],
         load: () => this.loadWholeSign(indexName, row.id),
-        indexURL: this.baseURL
+        indexURL: this.baseURL,
+        indexName
       }
       for (const field in SCAN_DEFAULTS) entry[field] = row[field] ?? SCAN_DEFAULTS[field]()
       if (vectors) {

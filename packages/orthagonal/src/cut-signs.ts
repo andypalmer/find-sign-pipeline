@@ -78,3 +78,27 @@ function canonicalJSON (value: unknown): string {
     return inner
   })
 }
+
+/**
+ * how many shard files should an index have now? A sign's shard comes from its id and the shard count, so
+ * changing the count moves almost every sign and makes every shard new. So once an index has a count we keep
+ * it, even as signs come and go, and only double it when shards have grown to twice their target size.
+ * (Doubling splits each old shard cleanly in two.) We never shrink: halving would move signs just the same.
+ */
+export function nextShardCount (previousCount: number | undefined, signCount: number): number {
+  return nextCount(previousCount, signCount, SIGNS_PER_SHARD, 'shard count', howManyShards)
+}
+
+/** the same rule for scan files, which are about 1,300 signs each */
+export function nextScanCount (previousCount: number | undefined, signCount: number): number {
+  return nextCount(previousCount, signCount, SIGNS_PER_SCAN_FILE, 'scan count', howManyScans)
+}
+
+function nextCount (previousCount: number | undefined, signCount: number, target: number, what: string, firstCount: (signCount: number) => number): number {
+  if (!Number.isInteger(signCount) || signCount < 0) throw new Error(`The sign count must be a whole number, not ${signCount}`)
+  if (previousCount === undefined) return firstCount(signCount)
+  requireWholeNumberAboveZero(previousCount, what)
+  let count = previousCount
+  while (signCount / count > target * 2) count *= 2
+  return count
+}

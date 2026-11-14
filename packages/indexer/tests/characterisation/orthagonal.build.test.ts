@@ -8,10 +8,14 @@ import { buildSearchIndex as build } from '../../src/build.ts'
 
 const buildSearchIndex = (provider: string, options: Parameters<typeof build>[2]) => build(provider, testSettings(), options)
 import { parse as parseVectors } from '@andypalmer/vectors'
+import { IndexReader, readIndexManifest, readTopManifest } from '@andypalmer/orthagonal'
 import { decodeHex, sign_open } from 'tweetnacl-ts'
 import { parseRecordFile, serialiseRecordFile } from '@andypalmer/records'
 import { rebaseRecordFile } from '../../src/records.ts'
 import relativeURL from '../../src/relative-url.ts'
+
+import { vectorLibrary } from '@andypalmer/vectors'
+const vectorLibraryLookup = (looked: string[]) => { const library = vectorLibrary(VectorLibraryBase); return async (word: string) => { looked.push(word); return library.lookup(word) } }
 
 let server: FakeDataServer
 const quiet = { log: () => {}, progress: () => {} }
@@ -29,7 +33,7 @@ function vectorWords (url: string) {
 describe('buildSearchIndex()', () => {
   it('writes the whole index in one signed bulk POST to the data server', async () => {
     await buildSearchIndex('alpha', quiet)
-    const bulk = server.requests.filter(r => r.method === 'POST')
+    const bulk = server.requests.filter(r => r.method === 'POST' && r.path === `${IndexBase}/alpha`)
     expect(bulk).toHaveLength(1)
     expect(bulk[0].path).toBe(`${IndexBase}/alpha`)
     expect(bulk[0].body.type).toBe('bulk')
@@ -248,5 +252,132 @@ describe('buildSearchIndex()', () => {
     expect(logs[0]).toBe('Reading search data alpha...')
     expect(logs.at(-1)).toBe('Build complete')
     expect(progress.at(-1)).toBe(1)
+  })
+})
+
+describe('buildSearchIndex() writing version 2 beside version 1', () => {
+  const topManifest = () => readTopManifest(server.getJSON(`${IndexBase}/manifest.json`))
+  const indexManifestOf = (indexName: string) => readIndexManifest(server.getJSON(`${IndexBase}/${topManifest().indexes[indexName]}`))
+  const sharedWords = () => topManifest().vectors.flatMap(name => [...parseVectors(server.get(`${IndexBase}/${name}`)!)].map(x => x.word)).sort()
+  const versionTwoRequests = (method: string) => server.requests.filter(r => r.method === method && r.path === IndexBase)
+  const publish = (data: any) => publishSearchData(server, { alpha: data })
+
+  it('writes manifest.json, which names the provider\'s index manifest and the shared vector files, leaving version 1 as it was', async () => {
+    await buildSearchIndex('alpha', quiet)
+    const top = topManifest()
+    expect(Object.keys(top.indexes)).toEqual(['alpha'])
+    expect(top.vectors.length).toBeGreaterThan(0)
+    const manifest = indexManifestOf('alpha')
+    for (const name of [...manifest.shards, ...manifest.scans, ...top.vectors]) expect(server.get(`${IndexBase}/${name}`), name).toBeDefined()
+    expect(server.getJSON(`${IndexBase}/alpha/meta.json`).entries).toBe(3)
+  })
+
+  it('puts the same signs in version 2 as in version 1, whole', async () => {
+    await buildSearchIndex('alpha', quiet)
+    const signs = indexManifestOf('alpha').shards.flatMap(name => server.getJSON(`${IndexBase}/${name}`).entries)
+    expect(signs.map((sign: any) => sign.id).sort()).toEqual(['car', 'cat', 'dog'])
+    const oldSigns = server.getJSON(`${IndexBase}/alpha/shard-0.json`).entries
+    for (const old of oldSigns) {
+      const sign = signs.find((candidate: any) => candidate.id === old.id)
+      expect({ ...sign, media: undefined }).toEqual({ ...old, media: undefined })
+    }
+  })
+
+  it('stores version 2 media addresses relative to the index folder, where its shards are', async () => {
+    await buildSearchIndex('alpha', quiet)
+    const cat = indexManifestOf('alpha').shards.flatMap(name => server.getJSON(`${IndexBase}/${name}`).entries).find((sign: any) => sign.id === 'cat')
+    expect(cat.media[0].thumbnail).toBe('../../../encoded-search-data/raw/cat-media/cat-0.webp')
+    expect(cat.media[0].encodes.map((x: any) => x.url)).toEqual([
+      '../../../encoded-search-data/raw/cat-media/cat-0.mp4',
+      '../../../encoded-search-data/raw/cat-media/cat-0.webm',
+    ])
+  })
+
+  it('reads back through the version 2 reader to the same full media addresses', async () => {
+    await buildSearchIndex('alpha', quiet)
+    const index = await new IndexReader(IndexBase, { mediaBaseURL: `${IndexBase}/` }).loadIndex('alpha')
+    expect(index.entries.map(entry => entry.id).sort()).toEqual(['car', 'cat', 'dog'])
+    const cat = await index.entries.find(entry => entry.id === 'cat')!.load()
+    expect(cat.media[0].thumbnail).toBe('http://data.test/collections/encoded-search-data/raw/cat-media/cat-0.webp')
+    expect(cat.title).toBe('Cat')
+  })
+
+  it('keeps the other providers\' indexes in manifest.json, without writing their files again', async () => {
+    await buildSearchIndex('beta', quiet)
+    const betaManifest = topManifest().indexes.beta
+    server.resetRequests()
+    await buildSearchIndex('alpha', quiet)
+    expect(Object.keys(topManifest().indexes)).toEqual(['alpha', 'beta'])
+    expect(topManifest().indexes.beta).toBe(betaManifest)
+    const written = versionTwoRequests('POST').flatMap(r => Object.keys(r.body.files))
+    expect(written.some(name => name === betaManifest)).toBe(false)
+  })
+
+  it('puts the words of every provider in the shared vectors', async () => {
+    await buildSearchIndex('beta', quiet)
+    await buildSearchIndex('alpha', quiet)
+    expect(sharedWords()).toEqual(['car', 'cat', 'dog', 'kitten', 'red', 'truck'])
+  })
+
+  it('starts the shared vectors from global-vectors.lps, so providers not yet built in version 2 are not missing from them', async () => {
+    await buildSearchIndex('beta', { ...quiet }) // as the build was before version 2 existed: only version 1
+    server.files.delete(`${IndexBase}/manifest.json`)
+    for (const name of [...server.files.keys()]) if (name.startsWith(`${IndexBase}/`) && !name.slice(IndexBase.length + 1).includes('/') && name !== `${IndexBase}/global-vectors.lps`) server.files.delete(name)
+    await buildSearchIndex('alpha', quiet)
+    expect(Object.keys(topManifest().indexes)).toEqual(['alpha'])
+    expect(sharedWords()).toEqual(['car', 'cat', 'dog', 'kitten', 'red', 'truck'])
+  })
+
+  it('looks each word up once, however many files want its vector', async () => {
+    const looked: string[] = []
+    const lookupVector = vectorLibraryLookup(looked)
+    await build('alpha', testSettings({ lookupVector }), quiet)
+    expect(looked.sort()).toEqual(['car', 'cat', 'dog'])
+  })
+
+  it('writes nothing in version 2 when nothing has changed', async () => {
+    await buildSearchIndex('alpha', quiet)
+    server.resetRequests()
+    await buildSearchIndex('alpha', quiet)
+    expect(versionTwoRequests('POST')).toEqual([])
+    expect(server.requests.filter(r => r.method === 'PUT' && r.path === `${IndexBase}/manifest.json`)).toEqual([])
+  })
+
+  it('writes manifest.json after everything else in the version 2 folder', async () => {
+    await buildSearchIndex('alpha', quiet)
+    const writes = server.requests.filter(r => (r.method === 'POST' && r.path === IndexBase) || (r.method === 'PUT' && r.path === `${IndexBase}/manifest.json`))
+    expect(writes.at(-1)!.method).toBe('PUT')
+    expect(writes.filter(r => r.method === 'PUT')).toHaveLength(1)
+    expect(writes.length).toBeGreaterThan(2)
+  })
+
+  it('keeps a word in the shared vectors after the last sign using it has gone, so no vector file changes', async () => {
+    await buildSearchIndex('alpha', quiet)
+    const before = topManifest().vectors
+    const data = publishedAlpha() as any
+    delete data.dog
+    publish(data)
+    await buildSearchIndex('alpha', quiet)
+    expect(topManifest().vectors).toEqual(before)
+    expect(sharedWords()).toContain('dog')
+  })
+
+  it('keeps an index\'s shard count when it shrinks, so the signs left stay where they were', async () => {
+    const big = Object.fromEntries(Array.from({ length: 40 }, (_, n) => [`sign${n}`, { ...(publishedAlpha() as any).cat, title: `Sign ${n}`, words: [`sign${n}`] }]))
+    publish(big)
+    await buildSearchIndex('alpha', quiet)
+    expect(indexManifestOf('alpha').shardCount).toBe(3)
+    publish(Object.fromEntries(Object.entries(big).slice(0, 5)))
+    await buildSearchIndex('alpha', quiet)
+    expect(indexManifestOf('alpha').shardCount).toBe(3)
+  })
+
+  it('writes no version 2 files when told not to', async () => {
+    await buildSearchIndex('alpha', { ...quiet })
+    for (const name of [...server.files.keys()]) if (name.startsWith(`${IndexBase}/`) && !name.slice(IndexBase.length + 1).includes('/') && name !== `${IndexBase}/global-vectors.lps`) server.files.delete(name)
+    server.resetRequests()
+    await build('alpha', testSettings({ writeVersion2: false }), quiet)
+    expect(server.get(`${IndexBase}/manifest.json`)).toBeUndefined()
+    expect(versionTwoRequests('POST')).toEqual([])
   })
 })

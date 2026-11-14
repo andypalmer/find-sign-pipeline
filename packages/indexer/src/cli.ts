@@ -10,6 +10,8 @@
 //     --locale <locale>              for splitting titles into words (default: en-AU)
 //     --fast                         reuse each provider's vectors from its last build
 //     --keep-identical               index signs with identical videos separately, rather than as one
+//     --no-version-2                 don't write the version 2 index (manifest.json and files named after their bytes)
+//                                    beside the version 1 index
 // Writing to a data server needs its write identity in the SEARCH_WRITE_IDENTITY environment variable.
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -29,6 +31,7 @@ const { values, positionals: providers } = parseArgs({
     locale: { type: 'string', default: 'en-AU' },
     fast: { type: 'boolean', default: false },
     'keep-identical': { type: 'boolean', default: false },
+    'no-version-2': { type: 'boolean', default: false },
   },
 })
 
@@ -63,5 +66,6 @@ for (const provider of providers) {
     locale: values.locale,
     fetch: fetchWithFiles,
     mergeIdenticalMedia: !values['keep-identical'],
+    writeVersion2: !values['no-version-2'],
   }, { fast: values.fast })
 }

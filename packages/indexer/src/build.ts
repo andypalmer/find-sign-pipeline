@@ -1,10 +1,11 @@
 // Building a provider's search index: read its encoded-search-data, apply overrides, keep its record file (each
 // sign's readable id), map its tags onto Find Sign's vocabulary and apply its tag claims, write the orthagonal
-// index, then rebuild the global word vectors from every index.
+// index, then rebuild the global word vectors from every index. Beside that (version 1) index it writes the
+// version 2 index: files named after their bytes, listed in manifest.json.
 import { fn } from '@andypalmer/find-sign-util'
 import { parseRecordFile } from '@andypalmer/records'
 import type { DataStore } from '@andypalmer/data-store'
-import { writeIndex, type EncodedSearchData } from '@andypalmer/orthagonal'
+import { planPublishTiers, writeIndex, writeVersion2Index, writeVersion2Vectors, type EncodedSearchData } from '@andypalmer/orthagonal'
 import { applyClaims, decidingClaims, mappings, mapTags, type ProviderMapping } from '@andypalmer/tags'
 import { claimsIn } from './claims.ts'
 import { build as buildVectors, parse as parseVectors, type Vector, type WordVector } from '@andypalmer/vectors'
@@ -14,6 +15,7 @@ import { overridesIn } from './overrides.ts'
 import { recordStoreIn, type RecordStore } from './record-store.ts'
 import { rebaseRecordFile, updateRecordFile } from './records.ts'
 import relativeURL from './relative-url.ts'
+import { Version2Publisher } from './version-2-publisher.ts'
 
 export type IndexSettings = {
   /** the find-sign collection: indexes, overrides, claims and record files are kept in it */
@@ -40,6 +42,9 @@ export type IndexSettings = {
   /** index signs whose videos are identical (by source sha256) as one result, the others' ids leading to it.
    * Default: true */
   mergeIdenticalMedia?: boolean,
+  /** also write the version 2 index (manifest.json and files named after their bytes) beside version 1.
+   * Default: true */
+  writeVersion2?: boolean,
   /** how each provider's tags map onto Find Sign's vocabulary, by provider id. A provider without one keeps its
    * tags as they are. Default: @andypalmer/tags' mappings */
   tagMappings?: ReadonlyMap<string, ProviderMapping>,
@@ -147,20 +152,15 @@ export async function buildSearchIndex (provider: string, settings: IndexSetting
     if (count) log(`Merged ${count} signs into ${result.merged.size} others with identical videos`)
   }
 
-  // store media urls relative to the index folder, so the index works from whatever host serves it
-  // (the reader resolves them back to absolute urls)
+  // store media urls relative to the folder the index's files are in, so the index works from whatever host
+  // serves it (the reader resolves them back to absolute urls). Version 1's files are in the provider's own
+  // folder; version 2's are one level up, in the index folder, so it needs urls relative to that, from its own copy
   const indexFolder = fn`${indexName}/${provider}`
   const indexFolderURL = `${collectionURL}${indexFolder}/`
-  for (const id in searchData) {
-    for (const mediaItem of searchData[id].media) {
-      // only for merging: the site has no use for it
-      delete mediaItem.sourceSha256
-      mediaItem.thumbnail = relativeURL(indexFolderURL, mediaItem.thumbnail)
-      for (const encode of mediaItem.encodes) {
-        encode.url = relativeURL(indexFolderURL, encode.url)
-      }
-    }
-  }
+  const writeVersion2 = settings.writeVersion2 ?? true
+  const searchDataForVersion2 = writeVersion2 ? structuredClone(searchData) : undefined
+  rebaseMedia(searchData, indexFolderURL)
+  if (searchDataForVersion2) rebaseMedia(searchDataForVersion2, `${collectionURL}${indexName}/`)
 
   let vectorCache: Map<string, WordVector> | undefined
   if (opts.fast) {
@@ -171,9 +171,16 @@ export async function buildSearchIndex (provider: string, settings: IndexSetting
     }
   }
 
+  // each word is looked up once, however many of the index's files want its vector
+  const lookedUp = new Map<string, Promise<Vector | undefined>>()
+  const lookUpOnce = (word: string) => {
+    if (!lookedUp.has(word)) lookedUp.set(word, Promise.resolve(vectorCache?.get(word) ?? lookupVector(word)))
+    return lookedUp.get(word)!
+  }
+
   log(`Building orthagonal index in memory...`)
   const files = await writeIndex(searchData, {
-    lookupVector: async word => vectorCache?.get(word) ?? await lookupVector(word),
+    lookupVector: lookUpOnce,
     log,
     progress: (num) => progress(0.05 + (num * 0.90))
   })
@@ -204,6 +211,40 @@ export async function buildSearchIndex (provider: string, settings: IndexSetting
   progress(0.99)
   log(`Writing global word vector cache...`)
   await store.write(fn`${indexName}/global-vectors.lps`, buildVectors(globalVectors, vectorFidelity))
+
+  if (searchDataForVersion2) {
+    progress(0.995)
+    log(`Writing version 2 index...`)
+    const publisher = new Version2Publisher(store, indexName)
+    const last = await publisher.lastBuild()
+    // the indexes keep their counts from the last build, so signs stay where they were
+    const written = await writeVersion2Index(provider, searchDataForVersion2, { previous: last.indexManifests[provider] })
+    // one set of word vectors for every index: this provider's words, the last build's words, and the words of every
+    // provider's version 1 index, so a provider not built in version 2 yet is not missing from it
+    const vectors = await writeVersion2Vectors({ [provider]: searchDataForVersion2 }, {
+      lookupVector: lookUpOnce,
+      previous: last.top,
+      keepVectors: { ...globalVectors, ...last.words }
+    })
+    // the other providers' indexes are as the last build left them: manifest.json still names them
+    const carriedOver = Object.fromEntries(Object.entries(last.top?.indexes ?? {}).filter(([name]) => name !== provider))
+    const report = await publisher.publish(planPublishTiers({ [provider]: written }, vectors, carriedOver))
+    log(`Version 2 index: ${report.written} files written, ${report.alreadyThere} already there`)
+  }
   progress(1.00)
   log('Build complete')
+}
+
+/** makes the media urls in a provider's search data relative to the folder its index files will be in */
+function rebaseMedia (searchData: EncodedSearchData, folderURL: string) {
+  for (const id in searchData) {
+    for (const mediaItem of searchData[id].media) {
+      // only for merging: the site has no use for it
+      delete mediaItem.sourceSha256
+      mediaItem.thumbnail = relativeURL(folderURL, mediaItem.thumbnail)
+      for (const encode of mediaItem.encodes) {
+        encode.url = relativeURL(folderURL, encode.url)
+      }
+    }
+  }
 }

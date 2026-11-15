@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.2.1](https://github.com/andypalmer/find-sign-pipeline/compare/orthagonal-v0.2.0...orthagonal-v0.2.1) (2026-11-15)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @andypalmer/vectors bumped from ^0.1.0 to ^0.1.1
+
 ## [0.2.0](https://github.com/andypalmer/find-sign-pipeline/compare/orthagonal-v0.1.0...orthagonal-v0.2.0) (2026-11-14)
 
 

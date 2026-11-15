@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.1](https://github.com/andypalmer/find-sign-pipeline/compare/vectors-v0.1.0...vectors-v0.1.1) (2026-11-15)
+
+
+### Bug Fixes
+
+* **vectors:** forget a failed open of the word vector library, so the next lookup tries again, and name the address and status that failed ([7cdb4f8](https://github.com/andypalmer/find-sign-pipeline/commit/7cdb4f8fd1e74b7953cd9965daad5f9c7c47de27))
+
 ## 0.1.0 (2026-10-22)
 
 

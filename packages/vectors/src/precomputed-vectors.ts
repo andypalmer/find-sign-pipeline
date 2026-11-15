@@ -25,6 +25,7 @@ export type WordVector = Float32Array
  */
 export async function open (path: string, fetch?: typeof globalThis.fetch): Promise<VectorLibrary> {
   const request = await (fetch ?? globalThis.fetch)(`${path}/info.json`, { mode: 'cors', cache: 'force-cache' })
+  if (!request.ok) throw new Error(`${path}/info.json: status ${request.status}`)
   const settings = await request.json()
   // without a fetch of its own, lookups use the global fetch as it is then
   return fetch ? { path, settings, fetch } : { path, settings }
@@ -37,6 +38,7 @@ export async function lookup (library: VectorLibrary, word: string): Promise<Wor
   const hash = await sha256(word)
   const bucket = parseInt(bytesToPrefixBits(hash, library.settings.shardBits), 2)
   const response = await (library.fetch ?? globalThis.fetch)(`${library.path}/${bucket}.lps`, { mode: 'cors', cache: 'force-cache' })
+  if (!response.ok) throw new Error(`${library.path}/${bucket}.lps: status ${response.status}`)
   const buffer = new Uint8Array(await response.arrayBuffer())
   for (const { word: entryWord, getVector } of parse(buffer)) {
     if (word === entryWord) return getVector()
